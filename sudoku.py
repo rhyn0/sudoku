@@ -1,4 +1,6 @@
 from math import *
+from board_gen import *
+import random
 
 FAIL = -1
 
@@ -69,8 +71,9 @@ def solve_board(table):
 if __name__ == "__main__":
     #arg = [[0,0,0,0,0,0,5,0,0],[0,0,0,0,0,9,0,0,0],[0,0,1,0,4,0,0,2,0],[0,0,0,5,0,0,0,0,0],[0,0,2,0,0,0,0,1,4],[0,3,0,7,0,0,0,0,0],[0,0,0,0,1,0,0,0,0],[0,8,0,0,0,0,7,0,0],[0,5,0,0,0,0,3,0,9]]
     #above is hard on this algorithm
-    arg = [[5,6,0,8,4,7,0,0,0],[3,0,9,0,0,0,6,0,0],[0,0,8,0,0,0,0,0,0],[0,1,0,0,8,0,0,4,0],[7,9,0,6,0,2,0,1,8],[0,5,0,0,3,0,0,9,0],[0,0,0,0,0,0,2,0,0],[0,0,6,0,0,0,8,0,7],[0,0,0,3,1,6,0,5,9]]
-    #above is a simple board, fast solve time
+    Generator.get_mul_boards("new_boards.txt")
+    arg = Generator.create_board(random.choice(Generator.boards))
+    #implementation to choose a board from premade file
     print("INITIAL STATE")
     print_board(arg)
     solve_board(arg)
