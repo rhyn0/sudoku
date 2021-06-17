@@ -1,6 +1,14 @@
-## Sudoku Solver
+# Sudoku Solver
 
 Currently a text based sudoku solver using backtracking to solve the whole board.
+
+## Running
+
+```bash
+python3 sudoku.py
+```
+
+### More Details
 
 #### Input
 
