@@ -143,8 +143,8 @@ class Generator:
             self.boards.append(all_boards[i : i + 9])
 
     def generate_board_template(self, board: List[List[str]]) -> None:
-        """Make a new board template from a fully solved list
-        TODO: use Daniel Beer method
+        """Make a new board template from a fully solved board
+        # TODO: use Daniel Beer method harden
         """
         pass
 
@@ -205,21 +205,23 @@ class Generator:
             free.remove(v)
             grid[self.ORDER + i][0] = v
 
-    def init_choices(self, grid, freedom: List[List[set]]):
+    @classmethod
+    def init_choices(cls, grid, freedom: List[List[set]]):
         # decide possible values for blank/0 cells
         for y in range(len(grid)):
             for x in range(len(grid[y])):
                 if grid[y][x] != 0:
-                    self.remove_freedom(freedom, x, y, grid[y][x])
+                    cls.remove_freedom(freedom, x, y, grid[y][x])
 
-    def choose_rest(self, grid, freedom: List[List[set]]):
+    @classmethod
+    def choose_rest(cls, grid, freedom: List[List[set]]):
         # recursively solve the board, allows backtracking
         def least_free(grid, freedom: List[List[set]]) -> Tuple[int, int]:
             index = -1, -1
             score = 0
             for i in range(len(grid)):
-                for j in range(len(grid[i])):
-                    if grid[i][j] == 0:
+                for j, cell_val in enumerate(grid[i]):
+                    if cell_val == 0:
                         if score == 0 or score > len(freedom[i][j]):
                             index = (i, j)
                             score = len(freedom[i][j])
@@ -236,14 +238,14 @@ class Generator:
             v = random.choice(list(current))
             current.remove(v)
             grid[ind_y][ind_x] = v
-            self.remove_freedom(new_free, ind_x, ind_y, v)
+            cls.remove_freedom(new_free, ind_x, ind_y, v)
 
-            if self.choose_rest(grid, new_free) == 0:
+            if cls.choose_rest(grid, new_free) == 0:
                 return 0
         grid[ind_y][ind_x] = 0
         return -1
 
-    def generate_new_board(self):
+    def generate_beer_board(self):
         """generate a new solved board that will be used to create a template
 
         This is created following Daniel Beer's algorithm, 
@@ -269,6 +271,29 @@ class Generator:
         self.pretty_print(board)
 
     @classmethod
+    def generate_board(cls) -> List[List[int]]:
+        board = [[0 for _ in range(9)] for _ in range(9)]
+        choices = [[cls.FULL_SET.copy() for _ in range(9)] for _ in range(9)]
+
+        def choose_box(x, y, grid):
+            # set to top left of the respective box
+            x -= x % cls.ORDER
+            y -= y % cls.ORDER
+            curr = cls.FULL_SET.copy()
+            for i in range(cls.ORDER):
+                for j in range(cls.ORDER):
+                    v = random.choice(list(curr))
+                    curr.remove(v)
+                    grid[y + i][x + j] = v
+
+        choose_box(0, 0, board)
+        choose_box(3, 3, board)
+        choose_box(6, 6, board)
+        cls.init_choices(board, choices)
+        cls.choose_rest(board, choices)
+        return board
+
+    @classmethod
     def remove_freedom(cls, freedom: List[List[set]], x: int, y: int, val: int):
 
         # remove from column
@@ -289,4 +314,5 @@ class Generator:
 
 if __name__ == "__main__":
     gen = Generator()
-    gen.generate_new_board()
+    b = gen.generate_board()
+    gen.pretty_print(b)
