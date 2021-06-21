@@ -1,6 +1,7 @@
 import random
-from typing import List
+from typing import List, Tuple
 import pickle
+from copy import deepcopy
 from sudoku import *
 
 
@@ -21,6 +22,8 @@ class Generator:
         [0, 0, "f", 0, 0, 0, "h", 0, "g"],
         [0, 0, 0, "c", "a", "f", 0, "e", "i"],
     ]
+    ORDER = 3
+    FULL_SET = set([i for i in range(1, 10)])
 
     def __init__(self, filename: str = None) -> None:
         """
@@ -94,12 +97,13 @@ class Generator:
         board : List[List[int]]
             board in list of lists format
         """
-        print("-" * 79)
+        hline = "-" * 60
+        print(hline)
         for i in range(9):
             for j in range(9):
-                print(f" {board[i][j]}", end="")
+                print(f"   {board[i][j]}", end="")
             print()
-        print("-" * 79)
+        print(hline)
 
     @staticmethod
     def format_board(data):
@@ -144,67 +148,143 @@ class Generator:
         """
         pass
 
+    def choose_box1(self, grid):
+        # modify in place, the first box of the board
+        box1 = self.FULL_SET.copy()
+        for i in range(self.ORDER):
+            for j in range(self.ORDER):
+                v = random.choice(list(box1))
+                box1.remove(v)
+                grid[i][j] = v
+
+    def choose_box2(self, grid):
+        # modify in place, the second box based on first box
+        rows = [set() for _ in range(self.ORDER)]
+        choose = [set() for _ in range(self.ORDER)]
+        for i in range(self.ORDER):
+            for el in grid[i][:3]:
+                rows[i].add(el)
+        free_set = rows[1].union(rows[2])
+        for i in range(self.ORDER):
+            v = random.choice(list(free_set))
+            choose[0].add(v)
+            free_set.remove(v)
+        middle_set = rows[0].union(rows[2]).difference(choose[0])
+        last_set = rows[0].union(rows[1]).difference(choose[0])
+        while len(last_set) > 3:
+            v = random.choice(list(middle_set))
+            choose[1].add(v)
+            middle_set.remove(v)
+            last_set.discard(v)  # discard throws no error if v doesn't exist
+        choose[1] = choose[1].union(middle_set.difference(last_set))
+        choose[2] = last_set.copy()
+        for i in range(self.ORDER):
+            l_choose = list(choose[i])
+            random.shuffle(l_choose)
+            grid[i][self.ORDER : 2 * self.ORDER] = l_choose
+
+    def choose_box3(self, grid):
+        # modify in place, choose last possible values
+        for i in range(self.ORDER):
+            # for each actual row, compute remaining choices and then fill
+            used = set()
+            for j in range(self.ORDER * 2):
+                used.add(grid[i][j])
+            free = list(self.FULL_SET.difference(used))
+            random.shuffle(free)
+            grid[i][self.ORDER * 2 : self.ORDER * self.ORDER] = free
+
+    def choose_col(self, grid):
+        # modify in place, choose left column
+        used = set()
+        for i in range(self.ORDER):
+            used.add(grid[i][0])
+        free = self.FULL_SET.difference(used)
+        for i in range(self.ORDER * 2):
+            v = random.choice(list(free))
+            free.remove(v)
+            grid[self.ORDER + i][0] = v
+
+    def init_choices(self, grid, freedom: List[List[set]]):
+        # decide possible values for blank/0 cells
+        for y in range(len(grid)):
+            for x in range(len(grid[y])):
+                if grid[y][x] != 0:
+                    self.remove_freedom(freedom, x, y, grid[y][x])
+
+    def choose_rest(self, grid, freedom: List[List[set]]):
+        # recursively solve the board, allows backtracking
+        def least_free(grid, freedom: List[List[set]]) -> Tuple[int, int]:
+            index = -1, -1
+            score = 0
+            for i in range(len(grid)):
+                for j in range(len(grid[i])):
+                    if grid[i][j] == 0:
+                        if score == 0 or score > len(freedom[i][j]):
+                            index = (i, j)
+                            score = len(freedom[i][j])
+            return index
+
+        ind_y, ind_x = least_free(grid, freedom)
+        if ind_x < 0 or ind_y < 0:
+            return 0
+        # need a copy or it gets overwritten in later recursive calls
+        current = freedom[ind_y][ind_x].copy()
+        while len(current) > 0:
+            # need this special function to make copy of each set in list
+            new_free = deepcopy(freedom)
+            v = random.choice(list(current))
+            current.remove(v)
+            grid[ind_y][ind_x] = v
+            self.remove_freedom(new_free, ind_x, ind_y, v)
+
+            if self.choose_rest(grid, new_free) == 0:
+                return 0
+        grid[ind_y][ind_x] = 0
+        return -1
+
     def generate_new_board(self):
-        ORDER = 3
-        FULL_SET = set([i for i in range(1, 10)])
+        """generate a new solved board that will be used to create a template
+
+        This is created following Daniel Beer's algorithm, 
+        https://dlbeer.co.nz/articles/sudoku.html
+        Copyright (C) 2011 Daniel Beer <dlbeer@gmail.com>
+        
+        Permission to use, copy, modify, and/or distribute this software for any
+        purpose with or without fee is hereby granted, provided that the above
+        copyright notice and this permission notice appear in all copies.
+        """
+
         # board demarks the actual board, choices are all possibilities for a cell
         board = [[0 for _ in range(9)] for _ in range(9)]
-        choices = [[set() for _ in range(9)] for _ in range(9)]
+        choices = [[self.FULL_SET.copy() for _ in range(9)] for _ in range(9)]
+        self.choose_box1(board)
+        self.choose_box2(board)
+        self.choose_box3(board)
+        self.choose_col(board)
+        self.init_choices(board, choices)
+        self.pretty_print([[len(x) for x in y] for y in choices])
+        print("choices above, board below")
+        self.choose_rest(board, choices)
+        self.pretty_print(board)
 
-        def choose_box1(grid):
-            # modify in place, the first box of the board
-            box1 = FULL_SET.copy()
-            for i in range(ORDER):
-                for j in range(ORDER):
-                    v = random.choice(list(box1))
-                    box1.remove(v)
-                    grid[i][j] = v
+    @classmethod
+    def remove_freedom(cls, freedom: List[List[set]], x: int, y: int, val: int):
 
-        def choose_box2(grid):
-            # modify in place, the second box based on first box
-            rows = [set() for _ in range(ORDER)]
-            choose = [set() for _ in range(ORDER)]
-            for i in range(ORDER):
-                for el in grid[i][:3]:
-                    rows[i].add(el)
-            free_set = rows[1].union(rows[2])
-            for i in range(ORDER):
-                choose[0].add(random.choice(list(free_set)))
-            middle_set = rows[0].union(rows[1]).difference(choose[0])
-            last_set = rows[0].union(rows[2]).difference(choose[0])
-            while len(last_set) > 3:
-                v = random.choice(list(middle_set))
-                choose[1].add(v)
-                middle_set.remove(v)
-                if v in last_set:
-                    last_set.remove(v)
-            choose[1] = choose[1].union(middle_set).difference(last_set)
-            choose[2] = last_set.copy()
+        # remove from column
+        for i in range(cls.ORDER ** 2):
+            freedom[i][x].discard(val)
 
-            for i in range(ORDER):
-                l_choose = list(choose[i])
-                random.shuffle(l_choose)
-                grid[i][ORDER : 2 * ORDER] = l_choose
+        # remove from row
+        for i in range(cls.ORDER ** 2):
+            freedom[y][i].discard(val)
 
-        def choose_box3(grid):
-            # modify in place, choose last possible values
-            pass
-
-        def choose_col(grid):
-            # modify in place, choose left column
-            pass
-
-        def init_choices(grid, freedom):
-            # decide possible values for blank/0 cells
-            pass
-
-        def choose_rest(grid, freedom):
-            # recursively solve the board, allows backtracking
-            pass
-
-        choose_box1(board)
-        choose_box2(board)
-        Generator.pretty_print(board)
+        # remove from box
+        start_row = y - y % cls.ORDER
+        start_col = x - x % cls.ORDER
+        for i in range(start_row, start_row + cls.ORDER):
+            for j in range(start_col, start_col + cls.ORDER):
+                freedom[i][j].discard(val)
 
 
 if __name__ == "__main__":
