@@ -1,8 +1,7 @@
 import random
-from typing import List, Tuple
+from typing import List, Tuple, Union
 import pickle
 from copy import deepcopy
-from sudoku import *
 
 
 class Generator:
@@ -89,6 +88,72 @@ class Generator:
         pickle.dump(self.boards, open(self.board_file, "wb"))
 
     @staticmethod
+    def check_box(table: List[List[int]], i: int, j: int, cell_val: int) -> int:
+        box_row = i - i % 3
+        box_col = j - j % 3
+        for x in range(3):
+            for y in range(3):
+                if cell_val == table[box_row + x][box_col + y]:
+                    return 0
+        return 1
+
+    @staticmethod
+    def check_row(table: List[List[int]], i: int, cell_val: int) -> int:
+        for x in range(9):
+            if cell_val == table[i][x]:
+                return 0
+        return 1
+
+    @staticmethod
+    def check_column(table: List[List[int]], j: int, cell_val: int) -> int:
+        for y in range(9):
+            if cell_val == table[y][j]:
+                return 0
+        return 1
+
+    @staticmethod
+    def find_blank(table: List[List[int]]) -> Union[tuple, None]:
+        for x in range(len(table)):
+            for y in range(len(table[0])):
+                if table[y][x] == 0:
+                    return (y, x)
+        return None
+
+    @staticmethod
+    def solve_board(table: List[List[int]]) -> bool:
+        """Recursive backtrack approach to solve an input sudoku board
+
+        Parameters
+        ----------
+        table : List[List[int]]
+            the sudoku board
+
+        Returns
+        -------
+        bool
+            True on solved, False on failure
+        """
+        blank = Generator.find_blank(table)
+        if blank:
+            row, col = blank
+        else:
+            # return being done with whole board
+            return True
+        for v in range(1, 10):
+            if (
+                Generator.check_box(table, row, col, v)
+                and Generator.check_row(table, row, v)
+                and Generator.check_column(table, col, v)
+            ):
+                table[col][row] = v
+                if Generator.solve_board(
+                    table
+                ):  # this creates the backtracking approach
+                    return True
+                table[col][row] = 0
+        return False
+
+    @staticmethod
     def pretty_print(board) -> None:
         """Output a pretty board with surrounding horizontal lines. Print to stdout
 
@@ -97,11 +162,15 @@ class Generator:
         board : List[List[int]]
             board in list of lists format
         """
-        hline = "-" * 60
+        hline = "-" * 36
         print(hline)
         for i in range(9):
+            if i % 3 == 0 and i > 0:
+                print(hline)
             for j in range(9):
-                print(f"   {board[i][j]}", end="")
+                if j % 3 == 0 and j > 0:
+                    print("  |", end="")
+                print(f"  {board[i][j]}", end="")
             print()
         print(hline)
 
@@ -142,11 +211,24 @@ class Generator:
         for i in range(0, len(all_boards), 9):
             self.boards.append(all_boards[i : i + 9])
 
-    def generate_board_template(self, board: List[List[str]]) -> None:
+    @classmethod
+    def get_board_diffic(cls, board):
+        pass
+
+    def generate_board_template(self, board: List[List[int]], max_iter: int) -> None:
         """Make a new board template from a fully solved board
         # TODO: use Daniel Beer method harden
         """
-        pass
+        best = 0  # keep track of difficulty
+        for _ in range(max_iter):
+            problem = deepcopy(board)
+            for _ in range(20):
+                c, r = random.randint(0, 8), random.randint(0, 8)
+                if random.random() < 0.5:
+                    problem[r][c] = 0
+                    problem[8 - r][8 - c] = 0
+                else:
+                    pass
 
     def choose_box1(self, grid):
         # modify in place, the first box of the board
@@ -265,10 +347,7 @@ class Generator:
         self.choose_box3(board)
         self.choose_col(board)
         self.init_choices(board, choices)
-        self.pretty_print([[len(x) for x in y] for y in choices])
-        print("choices above, board below")
         self.choose_rest(board, choices)
-        self.pretty_print(board)
 
     @classmethod
     def generate_board(cls) -> List[List[int]]:
@@ -316,3 +395,10 @@ if __name__ == "__main__":
     gen = Generator()
     b = gen.generate_board()
     gen.pretty_print(b)
+
+
+"""
+To calculate the difficulty of a board, we add the square of the freedom of each
+cell as it gets filled in and we dive deeper recursively. Since this uses local variable
+its value will be passed along instead of its reference and will only return when fully solved.
+"""
