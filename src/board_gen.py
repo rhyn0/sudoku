@@ -24,8 +24,6 @@ class Generator:
             [0, 0, 0, "c", "a", "f", 0, "e", "i"],
         ]
     ]
-    ORDER = 3
-    FULL_SET = set([i for i in range(1, 10)])
 
     def __init__(self, filename: str = None) -> None:
         """
@@ -102,72 +100,6 @@ class Generator:
             pickle.dump(self.boards, fp)
 
     @staticmethod
-    def check_box(table: List[List[int]], i: int, j: int, cell_val: int) -> int:
-        box_row = i - i % 3
-        box_col = j - j % 3
-        for x in range(3):
-            for y in range(3):
-                if cell_val == table[box_row + x][box_col + y]:
-                    return 0
-        return 1
-
-    @staticmethod
-    def check_row(table: List[List[int]], i: int, cell_val: int) -> int:
-        for x in range(9):
-            if cell_val == table[i][x]:
-                return 0
-        return 1
-
-    @staticmethod
-    def check_column(table: List[List[int]], j: int, cell_val: int) -> int:
-        for y in range(9):
-            if cell_val == table[y][j]:
-                return 0
-        return 1
-
-    @staticmethod
-    def find_blank(table: List[List[int]]) -> Union[tuple, None]:
-        for x in range(len(table)):
-            for y in range(len(table[0])):
-                if table[y][x] == 0:
-                    return (y, x)
-        return None
-
-    @staticmethod
-    def solve_board(table: List[List[int]]) -> bool:
-        """Recursive backtrack approach to solve an input sudoku board
-
-        Parameters
-        ----------
-        table : List[List[int]]
-            the sudoku board
-
-        Returns
-        -------
-        bool
-            True on solved, False on failure
-        """
-        blank = Generator.find_blank(table)
-        if blank:
-            row, col = blank
-        else:
-            # return being done with whole board
-            return True
-        for v in range(1, 10):
-            if (
-                Generator.check_box(table, row, col, v)
-                and Generator.check_row(table, row, v)
-                and Generator.check_column(table, col, v)
-            ):
-                table[col][row] = v
-                if Generator.solve_board(
-                    table
-                ):  # this creates the backtracking approach
-                    return True
-                table[col][row] = 0
-        return False
-
-    @staticmethod
     def pretty_print(board) -> None:
         """Output a pretty board with surrounding horizontal lines. Print to stdout
 
@@ -224,6 +156,85 @@ class Generator:
         all_boards = self.format_board(data)
         for i in range(0, len(all_boards), 9):
             self.boards.append(all_boards[i : i + 9])
+
+
+class NaiveGenerator(Generator):
+    def __init__(self, filename: str = None) -> None:
+        super().__init__(filename=filename)
+
+    @staticmethod
+    def check_box(table: List[List[int]], i: int, j: int, cell_val: int) -> int:
+        box_row = i - i % 3
+        box_col = j - j % 3
+        for x in range(3):
+            for y in range(3):
+                if cell_val == table[box_row + x][box_col + y]:
+                    return 0
+        return 1
+
+    @staticmethod
+    def check_row(table: List[List[int]], i: int, cell_val: int) -> int:
+        for x in range(9):
+            if cell_val == table[i][x]:
+                return 0
+        return 1
+
+    @staticmethod
+    def check_column(table: List[List[int]], j: int, cell_val: int) -> int:
+        for y in range(9):
+            if cell_val == table[y][j]:
+                return 0
+        return 1
+
+    @staticmethod
+    def find_blank(table: List[List[int]]) -> Union[tuple, None]:
+        for x in range(len(table)):
+            for y in range(len(table[0])):
+                if table[y][x] == 0:
+                    return (y, x)
+        return None
+
+    @staticmethod
+    def solve_board(table: List[List[int]]) -> bool:
+        """Recursive backtrack approach to solve an input sudoku board
+
+        Parameters
+        ----------
+        table : List[List[int]]
+            the sudoku board
+
+        Returns
+        -------
+        bool
+            True on solved, False on failure
+        """
+        blank = NaiveGenerator.find_blank(table)
+        if blank:
+            row, col = blank
+        else:
+            # return being done with whole board
+            return True
+        for v in range(1, 10):
+            if (
+                NaiveGenerator.check_box(table, row, col, v)
+                and NaiveGenerator.check_row(table, row, v)
+                and NaiveGenerator.check_column(table, col, v)
+            ):
+                table[col][row] = v
+                if NaiveGenerator.solve_board(
+                    table
+                ):  # this creates the backtracking approach
+                    return True
+                table[col][row] = 0
+        return False
+
+
+class BeerGenerator(Generator):
+    ORDER = 3
+    FULL_SET = set([i for i in range(1, 10)])
+
+    def __init__(self, filename: str = None) -> None:
+        super().__init__(filename=filename)
 
     @classmethod
     def get_board_diffic(cls, board, freedom=None):
@@ -330,6 +341,63 @@ class Generator:
         grid[ind_y][ind_x] = 0
         return -1
 
+    def choose_box1(self, grid):
+        # modify in place, the first box of the board
+        box1 = self.FULL_SET.copy()
+        for i in range(self.ORDER):
+            for j in range(self.ORDER):
+                v = random.choice(list(box1))
+                box1.remove(v)
+                grid[i][j] = v
+
+    def choose_box2(self, grid):
+        # modify in place, the second box based on first box
+        rows = [set() for _ in range(self.ORDER)]
+        choose = [set() for _ in range(self.ORDER)]
+        for i in range(self.ORDER):
+            for el in grid[i][:3]:
+                rows[i].add(el)
+        free_set = rows[1].union(rows[2])
+        for i in range(self.ORDER):
+            v = random.choice(list(free_set))
+            choose[0].add(v)
+            free_set.remove(v)
+        middle_set = rows[0].union(rows[2]).difference(choose[0])
+        last_set = rows[0].union(rows[1]).difference(choose[0])
+        while len(last_set) > 3:
+            v = random.choice(list(middle_set))
+            choose[1].add(v)
+            middle_set.remove(v)
+            last_set.discard(v)  # discard throws no error if v doesn't exist
+        choose[1] = choose[1].union(middle_set.difference(last_set))
+        choose[2] = last_set.copy()
+        for i in range(self.ORDER):
+            l_choose = list(choose[i])
+            random.shuffle(l_choose)
+            grid[i][self.ORDER : 2 * self.ORDER] = l_choose
+
+    def choose_box3(self, grid):
+        # modify in place, choose last possible values
+        for i in range(self.ORDER):
+            # for each actual row, compute remaining choices and then fill
+            used = set()
+            for j in range(self.ORDER * 2):
+                used.add(grid[i][j])
+            free = list(self.FULL_SET.difference(used))
+            random.shuffle(free)
+            grid[i][self.ORDER * 2 : self.ORDER * self.ORDER] = free
+
+    def choose_col(self, grid):
+        # modify in place, choose left column
+        used = set()
+        for i in range(self.ORDER):
+            used.add(grid[i][0])
+        free = self.FULL_SET.difference(used)
+        for i in range(self.ORDER * 2):
+            v = random.choice(list(free))
+            free.remove(v)
+            grid[self.ORDER + i][0] = v
+
     def generate_beer_board(self):
         """generate a new solved board that will be used to create a template
 
@@ -341,73 +409,20 @@ class Generator:
         purpose with or without fee is hereby granted, provided that the above
         copyright notice and this permission notice appear in all copies.
         """
-
-        def choose_box1(grid):
-            # modify in place, the first box of the board
-            box1 = self.FULL_SET.copy()
-            for i in range(self.ORDER):
-                for j in range(self.ORDER):
-                    v = random.choice(list(box1))
-                    box1.remove(v)
-                    grid[i][j] = v
-
-        def choose_box2(grid):
-            # modify in place, the second box based on first box
-            rows = [set() for _ in range(self.ORDER)]
-            choose = [set() for _ in range(self.ORDER)]
-            for i in range(self.ORDER):
-                for el in grid[i][:3]:
-                    rows[i].add(el)
-            free_set = rows[1].union(rows[2])
-            for i in range(self.ORDER):
-                v = random.choice(list(free_set))
-                choose[0].add(v)
-                free_set.remove(v)
-            middle_set = rows[0].union(rows[2]).difference(choose[0])
-            last_set = rows[0].union(rows[1]).difference(choose[0])
-            while len(last_set) > 3:
-                v = random.choice(list(middle_set))
-                choose[1].add(v)
-                middle_set.remove(v)
-                last_set.discard(v)  # discard throws no error if v doesn't exist
-            choose[1] = choose[1].union(middle_set.difference(last_set))
-            choose[2] = last_set.copy()
-            for i in range(self.ORDER):
-                l_choose = list(choose[i])
-                random.shuffle(l_choose)
-                grid[i][self.ORDER : 2 * self.ORDER] = l_choose
-
-        def choose_box3(grid):
-            # modify in place, choose last possible values
-            for i in range(self.ORDER):
-                # for each actual row, compute remaining choices and then fill
-                used = set()
-                for j in range(self.ORDER * 2):
-                    used.add(grid[i][j])
-                free = list(self.FULL_SET.difference(used))
-                random.shuffle(free)
-                grid[i][self.ORDER * 2 : self.ORDER * self.ORDER] = free
-
-        def choose_col(grid):
-            # modify in place, choose left column
-            used = set()
-            for i in range(self.ORDER):
-                used.add(grid[i][0])
-            free = self.FULL_SET.difference(used)
-            for i in range(self.ORDER * 2):
-                v = random.choice(list(free))
-                free.remove(v)
-                grid[self.ORDER + i][0] = v
-
         # board demarks the actual board, choices are all possibilities for a cell
         board = [[0 for _ in range(9)] for _ in range(9)]
-        choose_box1(board)
-        choose_box2(board)
-        choose_box3(board)
-        choose_col(board)
+        self.choose_box1(board)
+        self.choose_box2(board)
+        self.choose_box3(board)
+        self.choose_col(board)
         choices = self.init_choices(board)
         self.choose_rest(board, choices)
         return board
+
+
+class DiagonalGenerator(BeerGenerator):
+    def __init__(self, filename: str = None) -> None:
+        super().__init__(filename)
 
     def generate_board(self) -> List[List[int]]:
         board = [[0 for _ in range(9)] for _ in range(9)]
@@ -433,7 +448,7 @@ class Generator:
 
 
 if __name__ == "__main__":
-    gen = Generator()
+    gen = BeerGenerator()
     gen.load_board_file()
     print(len(gen.boards))
     b = gen.generate_beer_board()
