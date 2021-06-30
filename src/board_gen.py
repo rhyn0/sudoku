@@ -1,5 +1,5 @@
 import random
-from typing import List, Tuple, Union
+from typing import List, Set, SupportsInt, Tuple, Union, overload
 import pickle
 from copy import deepcopy
 import os.path
@@ -8,21 +8,19 @@ import os.path
 class Generator:
     """Object to hold previously created boards and to create more from stored templates
     
-    Board templates are stored with string 0 for blanks and string letters to be templated
+    Board templates are stored with int 0 for blanks and string letters to be templated
     """
 
     PREMADE_BOARD = [
-        [
-            ["e", "f", 0, "h", "d", "g", 0, 0, 0],
-            ["c", 0, "i", 0, 0, 0, "f", 0, 0],
-            [0, 0, "h", 0, 0, 0, 0, 0, 0],
-            [0, "a", 0, 0, "h", 0, 0, "d", 0],
-            ["g", "i", 0, "f", 0, "b", 0, "a", "h"],
-            [0, "e", 0, 0, "c", 0, 0, "i", 0],
-            [0, 0, 0, 0, 0, 0, "b", 0, 0],
-            [0, 0, "f", 0, 0, 0, "h", 0, "g"],
-            [0, 0, 0, "c", "a", "f", 0, "e", "i"],
-        ]
+        ["e", "f", 0, "h", "d", "g", 0, 0, 0],
+        ["c", 0, "i", 0, 0, 0, "f", 0, 0],
+        [0, 0, "h", 0, 0, 0, 0, 0, 0],
+        [0, "a", 0, 0, "h", 0, 0, "d", 0],
+        ["g", "i", 0, "f", 0, "b", 0, "a", "h"],
+        [0, "e", 0, 0, "c", 0, 0, "i", 0],
+        [0, 0, 0, 0, 0, 0, "b", 0, 0],
+        [0, 0, "f", 0, 0, 0, "h", 0, "g"],
+        [0, 0, 0, "c", "a", "f", 0, "e", "i"],
     ]
 
     def __init__(self, filename: str = None) -> None:
@@ -33,14 +31,16 @@ class Generator:
             location of the pickled boards file. 
             If None or empty string, defaults to Boards/board.pkl and will create the default template
         """
-        if not filename:
+        if filename is None or not os.path.isfile(filename):
             self.board_file = "src/Boards/board.pkl"
-            if not os.path.isfile(self.board_file):
+            if not os.path.isfile(
+                self.board_file
+            ):  # someone using default shouldn't lose all stored data
                 with open(self.board_file, "wb") as fp:
-                    pickle.dump(self.PREMADE_BOARD, fp)
+                    pickle.dump([self.PREMADE_BOARD], fp)
         else:
             self.board_file = filename
-        self.boards = []
+        self.boards = []  # type: ignore
 
     def templatize_board(self, board: List[List[int]]) -> None:
         """Takes a board and converts clues to string placeholders. Appends result to self.boards
@@ -50,7 +50,7 @@ class Generator:
         board : List[List[int]]
             solvable board with clues
         """
-        temp = []
+        temp: List[List[Union[int, str]]] = []
         holders = ["a", "b", "c", "d", "e", "f", "g", "h", "i"]
         random.shuffle(holders)
         d = {i: k for i, k in enumerate(holders, start=1)}
@@ -58,11 +58,8 @@ class Generator:
             temp.append([d[k] if k != 0 else 0 for k in row])
         self.boards.append(temp)
 
-    def create_board(self) -> List[list]:
+    def create_board(self) -> List[List[int]]:
         """Randomly choose a template stored in self.boards and return a playable board
-
-        Parameters 
-        ----------
 
         Returns
         -------
@@ -81,6 +78,9 @@ class Generator:
 
     def load_board_file(self) -> None:
         """Loads the board stored in a pickled file to the object
+        
+        File location is stored in self.board_file from initialization.
+        Do not call unless file exists, should only need to output_boards at end of use
         """
         try:
             with open(self.board_file, "rb") as fp:
@@ -100,7 +100,7 @@ class Generator:
             pickle.dump(self.boards, fp)
 
     @staticmethod
-    def pretty_print(board) -> None:
+    def pretty_print(board: List[List[int]]) -> None:
         """Output a pretty board with surrounding horizontal lines. Print to stdout
 
         Parameters
@@ -122,7 +122,7 @@ class Generator:
 
     @staticmethod
     def format_board(data):
-        """Takes in a list of lists of strings representing a board or boards
+        """Takes in a list of strings representing a board(s)
         Turns string zeros into ints so board creation works
 
         Parameters
@@ -132,14 +132,14 @@ class Generator:
 
         Returns
         -------
-        List[list[Union(str, int)]]
+        List[List[str | int]]]
         """
-        data = [line.split() for line in data]
-        for line in range(len(data)):
-            for item in range(len(data[line])):
-                if data[line][item] == "0":  # get rid of string zeros
-                    data[line][item] = 0
-        return data
+        ret = [line.split() for line in data]
+        for line in range(len(ret)):
+            for item in range(len(ret[line])):
+                if ret[line][item] == "0":  # get rid of string zeros
+                    ret[line][item] = 0
+        return ret
 
     def get_mul_boards(self, filename: str) -> None:
         """Read in boards from a given plaintext file to store in object
@@ -158,9 +158,11 @@ class Generator:
             self.boards.append(all_boards[i : i + 9])
 
 
-class NaiveGenerator(Generator):
-    def __init__(self, filename: str = None) -> None:
-        super().__init__(filename=filename)
+class NaiveSolver:
+    """Simple backtracking solver that incrementally tries each value in a cell
+
+    Recursive and no object __init__
+    """
 
     @staticmethod
     def check_box(table: List[List[int]], i: int, j: int, cell_val: int) -> int:
@@ -208,7 +210,7 @@ class NaiveGenerator(Generator):
         bool
             True on solved, False on failure
         """
-        blank = NaiveGenerator.find_blank(table)
+        blank = NaiveSolver.find_blank(table)
         if blank:
             row, col = blank
         else:
@@ -216,12 +218,12 @@ class NaiveGenerator(Generator):
             return True
         for v in range(1, 10):
             if (
-                NaiveGenerator.check_box(table, row, col, v)
-                and NaiveGenerator.check_row(table, row, v)
-                and NaiveGenerator.check_column(table, col, v)
+                NaiveSolver.check_box(table, row, col, v)
+                and NaiveSolver.check_row(table, row, v)
+                and NaiveSolver.check_column(table, col, v)
             ):
                 table[col][row] = v
-                if NaiveGenerator.solve_board(
+                if NaiveSolver.solve_board(
                     table
                 ):  # this creates the backtracking approach
                     return True
@@ -230,14 +232,46 @@ class NaiveGenerator(Generator):
 
 
 class BeerGenerator(Generator):
-    ORDER = 3
+    ORDER = 3  # store like this to allow scaling up to 'larger' sudoku
     FULL_SET = set([i for i in range(1, 10)])
 
     def __init__(self, filename: str = None) -> None:
+        """create a sudoku board generator that uses Daniel Beer's methodology
+
+        This is created following Daniel Beer's algorithm, 
+        https://dlbeer.co.nz/articles/sudoku.html
+        Copyright (C) 2011 Daniel Beer <dlbeer@gmail.com>
+        
+        Permission to use, copy, modify, and/or distribute this software for any
+        purpose with or without fee is hereby granted, provided that the above
+        copyright notice and this permission notice appear in all copies.
+
+        Parameters
+        ----------
+        filename : str, optional
+            file path to read in board data from, or where to store it, by default None
+        """
         super().__init__(filename=filename)
 
     @classmethod
-    def get_board_diffic(cls, board, freedom=None):
+    def get_board_diffic(
+        cls, board: List[List[int]], freedom: List[List[Set[int]]] = None
+    ) -> int:
+        """Calculate board difficulty, usually used on unsolved boards
+
+        # TODO: complete and think about branching coefficients
+
+        Parameters
+        ----------
+        board : List[List[int]]
+            board to find difficulty of
+        freedom : List[List[Set[int]]], optional
+            List of sets containing choices for each cell, by default None
+
+        Returns
+        -------
+        int
+        """
         if freedom is None:
             freedom = cls.init_choices(board)
         diff = 0
@@ -250,7 +284,15 @@ class BeerGenerator(Generator):
         """Make a new board template from a fully solved board
         
         Will append to self.boards. Either removes clues on the board or adds a pair back in. 
-        Increasing max_iter will make a more difficult puzzle.
+        Increasing max_iter will make a more difficult puzzle. 
+        # TODO: verify that a board is uniquely solvable after a cycle else return
+
+        Parameters
+        ----------
+        solution : List[List[int]]
+            solved board to generate an unsolved board from
+        max_iter : int
+            how many cycles of revisions should a board go through
         """
         board = deepcopy(solution)
         for _ in range(max_iter):
@@ -273,8 +315,20 @@ class BeerGenerator(Generator):
         self.templatize_board(board)
 
     @classmethod
-    def init_choices(cls, grid) -> List[List[set]]:
-        # decide possible values for blank/0 cells
+    def init_choices(cls, grid: List[List[int]]) -> List[List[Set[int]]]:
+        """initialize the possible values for all cells in a grid
+
+        Cells that have been filled in already will be demarked by a set containing only that value.
+
+        Parameters
+        ----------
+        grid : List[List[int]]
+            board to initialize the choices based on
+
+        Returns
+        -------
+        List[List[Set[int]]]
+        """
         freedom = [[cls.FULL_SET.copy() for _ in range(9)] for _ in range(9)]
         for y in range(len(grid)):
             for x in range(len(grid[y])):
@@ -284,6 +338,19 @@ class BeerGenerator(Generator):
 
     @classmethod
     def remove_freedom(cls, freedom: List[List[set]], x: int, y: int, val: int):
+        """Change the freedom based on adding val to the cell at position [y][x]
+
+        Restores original state of cell [y][x] at end, so every cell will have at least 1 choice
+
+        Parameters
+        ----------
+        freedom : List[List[set]]
+            List of lists containing the freedoms for each cell
+        x : int
+        y : int
+        val : int
+            value to be inserted
+        """
         saved = freedom[y][x].copy()
         # remove from column
         for i in range(cls.ORDER ** 2):
@@ -302,7 +369,22 @@ class BeerGenerator(Generator):
         freedom[y][x] = saved
 
     @classmethod
-    def is_legal_board(cls, grid, freedom: List[List[set]]) -> bool:
+    def is_legal_board(cls, grid: List[List[int]], freedom: List[List[set]]) -> bool:
+        """Labeled as a sanity checker, usually to make sure a board is solvable
+
+        Makes sure that each filled in cell has its value in the appropriate freedom cell.
+        If a cell's freedom set doesn't contain the value it is, then there is a reused value issue making it unsolvable.
+
+        Parameters
+        ----------
+        grid : List[List[int]]
+        freedom : List[List[set]]
+
+        Returns
+        -------
+        bool
+            True/False to answer whether it is solvable or not
+        """
         for y in range(len(grid)):
             for x in range(len(grid[y])):
                 if grid[y][x] != 0 and grid[y][x] not in freedom[y][x]:
@@ -310,8 +392,20 @@ class BeerGenerator(Generator):
         return True
 
     @classmethod
-    def choose_rest(cls, grid, freedom: List[List[set]]):
-        # recursively solve the board, allows backtracking
+    def choose_rest(cls, grid: List[List[int]], freedom: List[List[set]]) -> int:
+        """Recursively solve grid, allows backtracking
+
+        Parameters
+        ----------
+        grid : List[List[int]]
+        freedom : List[List[set]]
+
+        Returns
+        -------
+        int
+            0 on completion, -1 on errors
+        """
+
         def least_free(grid, freedom: List[List[set]]) -> Tuple[int, int]:
             index = -1, -1
             score = 0
@@ -341,8 +435,16 @@ class BeerGenerator(Generator):
         grid[ind_y][ind_x] = 0
         return -1
 
-    def choose_box1(self, grid):
-        # modify in place, the first box of the board
+    def choose_box1(self, grid: List[List[int]]) -> None:
+        """Fill in place the first box, starting in upper left hand corner of the grid
+
+        Randomly chooses from set of remaining values for each cell
+
+        Parameters
+        ----------
+        grid : List[List[int]]
+            the completely empty board
+        """
         box1 = self.FULL_SET.copy()
         for i in range(self.ORDER):
             for j in range(self.ORDER):
@@ -350,18 +452,31 @@ class BeerGenerator(Generator):
                 box1.remove(v)
                 grid[i][j] = v
 
-    def choose_box2(self, grid):
-        # modify in place, the second box based on first box
-        rows = [set() for _ in range(self.ORDER)]
-        choose = [set() for _ in range(self.ORDER)]
+    def choose_box2(self, grid: List[List[int]]) -> None:
+        """Fill in place the second box, upper row - middle column
+
+        For each box-row, stores the used values from the previous box then chooses a value
+        from the other 2 box-rows.
+
+        Parameters
+        ----------
+        grid : List[List[int]]
+            board that has only the first box filled in
+        """
+        rows: List[Set[int]] = [set() for _ in range(self.ORDER)]
+        choose: List[Set[int]] = [set() for _ in range(self.ORDER)]
         for i in range(self.ORDER):
             for el in grid[i][:3]:
                 rows[i].add(el)
+        # randomly choose 3 element for first box-row from the 6 possible elements
         free_set = rows[1].union(rows[2])
         for i in range(self.ORDER):
             v = random.choice(list(free_set))
             choose[0].add(v)
             free_set.remove(v)
+        # make sure each doesn't reuse a value
+        # middle_set = (rows[0] | rows[2]) - choose[0]
+        # last_set = (rows[0] | rows[1]) - choose[0]
         middle_set = rows[0].union(rows[2]).difference(choose[0])
         last_set = rows[0].union(rows[1]).difference(choose[0])
         while len(last_set) > 3:
@@ -369,45 +484,56 @@ class BeerGenerator(Generator):
             choose[1].add(v)
             middle_set.remove(v)
             last_set.discard(v)  # discard throws no error if v doesn't exist
+        # choose[1] = choose[1] | (middle_set - last_set)
         choose[1] = choose[1].union(middle_set.difference(last_set))
         choose[2] = last_set.copy()
+        # slice assignment for speed
         for i in range(self.ORDER):
             l_choose = list(choose[i])
             random.shuffle(l_choose)
             grid[i][self.ORDER : 2 * self.ORDER] = l_choose
 
-    def choose_box3(self, grid):
-        # modify in place, choose last possible values
+    def choose_box3(self, grid: List[List[int]]) -> None:
+        """fill in the last box of the top row, needs to have other 2 boxes filled in
+
+        For each row, finds remaining 3 elements available and randomly chooses location
+
+        Parameters
+        ----------
+        grid : List[List[int]]
+            board to fill in that has 2 boxes filled in
+        """
         for i in range(self.ORDER):
-            # for each actual row, compute remaining choices and then fill
-            used = set()
+            avail = self.FULL_SET.copy()
             for j in range(self.ORDER * 2):
-                used.add(grid[i][j])
-            free = list(self.FULL_SET.difference(used))
+                avail.remove(grid[i][j])
+            free = list(avail)
             random.shuffle(free)
             grid[i][self.ORDER * 2 : self.ORDER * self.ORDER] = free
 
-    def choose_col(self, grid):
-        # modify in place, choose left column
-        used = set()
+    def choose_col(self, grid: List[List[int]]) -> None:
+        """choose left hand column values, should be called after box 1 is filled
+
+        Removes the used values from first box, then randomly selects them to place in.
+
+        Parameters
+        ----------
+        grid : List[List[int]]
+        """
+        avail = self.FULL_SET.copy()
         for i in range(self.ORDER):
-            used.add(grid[i][0])
-        free = self.FULL_SET.difference(used)
+            avail.remove(grid[i][0])
         for i in range(self.ORDER * 2):
-            v = random.choice(list(free))
-            free.remove(v)
+            v = random.choice(list(avail))
+            avail.remove(v)
             grid[self.ORDER + i][0] = v
 
-    def generate_beer_board(self):
-        """generate a new solved board that will be used to create a template
+    def generate_board(self) -> List[List[int]]:
+        """Generate new solved board following Beer method
 
-        This is created following Daniel Beer's algorithm, 
-        https://dlbeer.co.nz/articles/sudoku.html
-        Copyright (C) 2011 Daniel Beer <dlbeer@gmail.com>
-        
-        Permission to use, copy, modify, and/or distribute this software for any
-        purpose with or without fee is hereby granted, provided that the above
-        copyright notice and this permission notice appear in all copies.
+        Returns
+        -------
+        List[List[int]]
         """
         # board demarks the actual board, choices are all possibilities for a cell
         board = [[0 for _ in range(9)] for _ in range(9)]
@@ -422,11 +548,25 @@ class BeerGenerator(Generator):
 
 class DiagonalGenerator(BeerGenerator):
     def __init__(self, filename: str = None) -> None:
+        """Class that uses slightly different methodology to Beer method
+
+        Fills in diagonal, top-left to bottom-right, boxes then solves
+        
+        Parameters
+        ----------
+        filename : str, optional
+            location to store pickled boards or of existing file, by default None
+        """
         super().__init__(filename)
 
     def generate_board(self) -> List[List[int]]:
+        """Generate new solved board
+
+        Returns
+        -------
+        List[List[int]]
+        """
         board = [[0 for _ in range(9)] for _ in range(9)]
-        choices = [[self.FULL_SET.copy() for _ in range(9)] for _ in range(9)]
 
         def choose_box(x, y, grid):
             # set to top left of the respective box
@@ -448,11 +588,6 @@ class DiagonalGenerator(BeerGenerator):
 
 
 if __name__ == "__main__":
-    gen = BeerGenerator()
-    gen.load_board_file()
-    print(len(gen.boards))
-    b = gen.generate_beer_board()
-    gen.generate_board_template(b, 5)
-    print(len(gen.boards))
-    gen.pretty_print(gen.boards[-1])
+    gen = DiagonalGenerator()
+    gen.generate_board()
 
